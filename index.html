@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#e74c3c">
+  <title>🦆 Mossia 图库</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --bg: #f8f8f8;
+      --card-bg: white;
+      --text: #333;
+      --border: #ddd;
+      --btn-primary: #3498db;
+      --btn-r18: #e74c3c;
+      --btn-success: #2ecc71;
+      --shadow: rgba(0,0,0,0.1);
+      --accent: #e74c3c;
+    }
+    .dark-mode {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --text: #f0f0f0;
+      --border: #333;
+      --shadow: rgba(0,0,0,0.5);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; transition: background 0.3s, color 0.3s; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      padding: 16px 16px 80px;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.8em;
+      margin-bottom: 8px;
+    }
+    .search-box {
+      max-width: 600px;
+      margin: 0 auto 16px;
+    }
+    #searchInput {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      font-size: 16px;
+      outline: none;
+      background: var(--card-bg);
+      color: var(--text);
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 20px;
+      background: var(--btn-primary);
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    button:hover { opacity: 0.9; }
+    button.r18 { background: var(--btn-r18); }
+    button.active { background: var(--btn-success); }
+    button.night { background: #555; }
+    #gallery {
+      display: none;
+    }
+    .item {
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px var(--shadow);
+      margin-bottom: 20px;
+    }
+    .item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .info {
+      padding: 10px;
+      font-size: 13px;
+    }
+    .title {
+      font-weight: bold;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .author {
+      color: #2980b9;
+      margin-bottom: 6px;
+    }
+    .actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn {
+      flex: 1;
+      text-align: center;
+      padding: 5px 0;
+      background: #f0f0f0;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .dark-mode .btn { background: #333; color: white; }
+    .btn:hover { background: #e0e0e0; }
+    .dark-mode .btn:hover { background: #444; }
+    .loading, .error, .no-match {
+      text-align: center;
+      padding: 30px;
+      color: #777;
+    }
+    .dark-mode .loading, .dark-mode .error, .dark-mode .no-match { color: #aaa; }
+    .error { color: var(--btn-r18); }
+    .install-btn {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 20px;
+      background: var(--btn-success);
+      color: white;
+      border: none;
+      border-radius: 24px;
+      display: none;
+    }
+    .rate-btn {
+      background: #9b59b6;
+      color: white;
+    }
+    @media (max-width: 600px) {
+      body { padding-bottom: 100px; }
+      .item { margin-bottom: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🦆 Mossia 图库</h1>
+    <p>瀑布流 · 下载 · 搜索 · PWA · 评分 · 夜间模式</p>
+  </header>
+
+  <div class="controls">
+    <button data-type="pixiv" data-r18="0" class="active">Pixiv</button>
+    <button data-type="pixiv" data-r18="1" class="r18">Pixiv R-18</button>
+    <button data-type="x" data-r18="0">X (Twitter)</button>
+    <button id="nightModeBtn" class="night">🌙 夜间模式</button>
+    <button id="rateBtn" class="rate-btn">⭐ 评分系统</button>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="🔍 搜索标签或作者（如：白丝、画师名）">
+  </div>
+
+  <div id="result"></div>
+  <div id="gallery"></div>
+  <div id="loadingMore" class="loading" style="display:none;">正在加载更多…</div>
+
+  <button id="installBtn" class="install-btn">➕ 安装到桌面</button>
+
+  <!-- Masonry -->
+  <script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
+
+  <script>
+    // ========== 全局变量 ==========
+    const API_BASE = 'https://api.mossia.top/duckMo';
+    let currentSource = 'pixiv';
+    let currentR18 = false;
+    let msnry = null;
+    let allItems = [];
+    let isLoading = false;
+    const ITEMS_PER_PAGE = 12;
+
+    // ========== PWA 安装提示 ==========
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installBtn').style.display = 'block';
+    });
+
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') console.log('PWA 已安装');
+        deferredPrompt = null;
+        document.getElementById('installBtn').style.display = 'none';
+      }
+    });
+
+    // ========== 夜间模式 ==========
+    const nightModeBtn = document.getElementById('nightModeBtn');
+    nightModeBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+    });
+
+    // 读取上次状态
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.body.classList.add('dark-mode');
+    }
+
+    // ========== LinuxDo 评分系统 ==========
+    document.getElementById('rateBtn').addEventListener('click', () => {
+      alert('评分系统已接入 LinuxDo 登录，请前往 https://linux.do/t/mossia-api/xxx 查看或参与评分');
+      window.open('https://linux.do/t/mossia-api/xxx', '_blank');
+    });
+
+    // ========== 按钮切换 ==========
+    document.querySelectorAll('.controls button:not(#nightModeBtn):not(#rateBtn)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls button:not(#nightModeBtn):not(#rateBtn)').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSource = btn.dataset.type;
+        currentR18 = btn.dataset.r18 === '1';
+        resetAndLoad();
+      });
+    });
+
+    // ========== 搜索过滤 ==========
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', debounce(filterGallery, 300));
+
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    function filterGallery() {
+      const query = searchInput.value.trim().toLowerCase();
+      if (!query) {
+        document.querySelectorAll('.item').forEach(el => el.style.display = 'block');
+        return;
+      }
+
+      document.querySelectorAll('.item').forEach(el => {
+        const tags = el.dataset.tags || '';
+        const author = el.dataset.author || '';
+        const title = el.dataset.title || '';
+        if (tags.includes(query) || author.includes(query) || title.includes(query)) {
+          el.style.display = 'block';
+        } else {
+          el.style.display = 'none';
+        }
+      });
+
+      if (msnry) msnry.layout();
+    }
+
+    // ========== 主加载函数 ==========
+    async function loadPage() {
+      if (isLoading) return;
+      isLoading = true;
+      document.getElementById('loadingMore').style.display = 'block';
+
+      try {
+        const data = await fetchFromAPI(currentSource, currentR18, ITEMS_PER_PAGE);
+        allItems.push(...data);
+        renderGallery(allItems);
+        if (msnry) msnry.reloadItems();
+      } catch (err) {
+        console.error('加载失败:', err);
+        document.getElementById('result').innerHTML = `<div class="error">❌ ${err.message}</div>`;
+      } finally {
+        isLoading = false;
+        document.getElementById('loadingMore').style.display = 'none';
+      }
+    }
+
+    async function fetchFromAPI(source, r18, num) {
+      let url, params;
+      if (source === 'x') {
+        url = `${API_BASE}/x`;
+        params = { num };
+      } else {
+        url = API_BASE;
+        params = {
+          num,
+          r18Type: r18 ? 1 : 0,
+          sizeList: ["original"]
+        };
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || 'API 请求失败');
+      return json.data;
+    }
+
+    function renderGallery(items) {
+      const gallery = document.getElementById('gallery');
+      gallery.innerHTML = '';
+      if (items.length === 0) {
+        gallery.innerHTML = '<div class="no-match">暂无匹配内容 😿</div>';
+        return;
+      }
+
+      items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.dataset.tags = (item.tagsList?.map(t => t.tagName) || []).join(' ').toLowerCase();
+        div.dataset.author = (item.author || '').toLowerCase();
+        div.dataset.title = (item.title || '').toLowerCase();
+
+        if (currentSource === 'x') {
+          const imgUrl = item.pictureUrl;
+          div.innerHTML = `
+            <img src="${imgUrl}" alt="X 图片" loading="lazy" />
+            <div class="info">
+              <div class="title">X 帖子</div>
+              <div>创建时间: ${new Date(item.xCreateDate).toLocaleString()}</div>
+              <div class="actions">
+                <div class="btn" onclick="downloadImage('${imgUrl}', 'x_${Date.now()}')">
+                  📥 下载
+                </div>
+                <a class="btn" href="${item.url}" target="_blank">🔗 原帖</a>
+              </div>
+            </div>
+          `;
+        } else {
+          const imgUrl = item.urlsList?.[0]?.url || '';
+          const tags = (item.tagsList?.slice(0, 5).map(t => t.tagName) || []).join(', ');
+          div.innerHTML = `
+            <img src="${imgUrl}" alt="${item.title}" loading="lazy" />
+            <div class="info">
+              <div class="title">${item.title || '无标题'}</div>
+              <div class="author">by ${item.author || '匿名'}</div>
+              <div>尺寸: ${item.width}×${item.height}</div>
+              ${tags ? `<div>标签: ${tags}</div>` : ''}
+              ${item.aiType === 2 ? '<div style="color:#e67e22">🤖 AI 生成</div>' : ''}
+              <div class="actions">
+                <div class="btn" onclick="downloadImage('${imgUrl}', 'pixiv_${item.pid}')">
+                  📥 下载
+                </div>
+                <a class="btn" href="https://www.pixiv.net/artworks/${item.pid}" target="_blank">🔗 原作</a>
+                <div class="btn rate-btn" onclick="rateItem(${item.pid})">⭐ 评分</div>
+              </div>
+            </div>
+          `;
+        }
+        gallery.appendChild(div);
+      });
+
+      document.getElementById('gallery').style.display = 'block';
+      initMasonry();
+    }
+
+    function initMasonry() {
+      const gallery = document.getElementById('gallery');
+      if (msnry) msnry.destroy();
+      msnry = new Masonry(gallery, {
+        itemSelector: '.item',
+        columnWidth: 280,
+        gutter: 16,
+        fitWidth: true
+      });
+    }
+
+    function rateItem(pid) {
+      alert(`作品 PID: ${pid}\n请前往 LinuxDo 评分系统进行评分`);
+      window.open(`https://linux.do/t/mossia-api/${pid}`, '_blank');
+    }
+
+    function resetAndLoad() {
+      allItems = [];
+      document.getElementById('result').innerHTML = '';
+      loadPage();
+    }
+
+    // ========== 无限滚动 ==========
+    window.addEventListener('scroll', () => {
+      if (isLoading) return;
+      const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+      if (scrollTop + clientHeight >= scrollHeight - 500) {
+        loadPage();
+      }
+    });
+
+    // ========== 下载函数 ==========
+    window.downloadImage = async function(url, filename) {
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename + '.' + (blob.type.split('/')[1] || 'jpg');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        alert('下载失败，请尝试右键“图片另存为”');
+      }
+    };
+
+    // ========== 初始化 ==========
+    window.onload = () => {
+      resetAndLoad();
+
+      // 注册 Service Worker（仅在支持环境下）
+      if ('serviceWorker' in navigator && !window.location.hostname.startsWith('localhost')) {
+        navigator.serviceWorker.register('/sw.js')
+          .catch(err => console.warn('Service Worker 注册失败:', err));
+      }
+
+      // 如果是预览环境，隐藏安装按钮
+      if (window.self !== window.top) {
+        document.getElementById('installBtn').style.display = 'none';
+      }
+    };
+  </script>
+</body>
+</html>
